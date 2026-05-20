@@ -1,0 +1,3 @@
+IPG | HTTP Error 404: Not Found
+MMC | HTTP Error 404: Not Found
+RUT | Sin filas válidas para RUT
