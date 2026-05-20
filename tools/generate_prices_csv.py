@@ -7,6 +7,7 @@ from pathlib import Path
 
 TICKERS_FILE = Path("assets/data/tickers.txt")
 OUTPUT_FILE = Path("assets/data/prices_daily.csv")
+FAILED_FILE = Path("assets/data/failed_tickers.txt")
 
 YEARS_BACK = 5
 
@@ -61,8 +62,7 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
     results = chart.get("result", [])
 
     if not results:
-        print(f"[WARN] Sin datos para {ticker}")
-        return []
+        raise RuntimeError(f"Sin resultados para {ticker}")
 
     result = results[0]
 
@@ -112,13 +112,29 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
         except Exception as e:
             print(f"[WARN] Fila ignorada en {ticker}: {e}")
 
+    if not rows:
+        raise RuntimeError(f"Sin filas válidas para {ticker}")
+
     print(f"[OK] {ticker}: {len(rows)} filas")
     return rows
+
+
+def write_failed_tickers(failed: list[tuple[str, str]]) -> None:
+    FAILED_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with FAILED_FILE.open("w", encoding="utf-8") as file:
+        if not failed:
+            file.write("Sin fallidos\n")
+            return
+
+        for ticker, reason in failed:
+            file.write(f"{ticker} | {reason}\n")
 
 
 def main() -> None:
     tickers = read_tickers()
     all_rows = []
+    failed = []
 
     print(f"Tickers encontrados: {len(tickers)}")
     print(", ".join(tickers))
@@ -128,7 +144,11 @@ def main() -> None:
             rows = download_yahoo_chart(ticker)
             all_rows.extend(rows)
         except Exception as e:
-            print(f"[ERROR] {ticker}: {e}")
+            reason = str(e)
+            failed.append((ticker, reason))
+            print(f"[ERROR] {ticker}: {reason}")
+
+    write_failed_tickers(failed)
 
     if not all_rows:
         raise RuntimeError(
@@ -160,6 +180,13 @@ def main() -> None:
 
     print(f"Archivo generado: {OUTPUT_FILE}")
     print(f"Total filas: {len(all_rows)}")
+
+    if failed:
+        print(f"Tickers fallidos: {len(failed)}")
+        for ticker, reason in failed:
+            print(f" - {ticker}: {reason}")
+    else:
+        print("Tickers fallidos: 0")
 
 
 if __name__ == "__main__":
