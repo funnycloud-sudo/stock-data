@@ -3,17 +3,28 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
-TICKERS = [
-    "NVDA",
-    "AAPL",
-    "MSFT",
-    "GOOGL",
-    "WMT",
-]
+TICKERS_FILE = Path("assets/data/tickers.txt")
+OUTPUT_FILE = Path("assets/data/prices_daily.csv")
 
 YEARS_BACK = 5
 
-OUTPUT_FILE = Path("assets/data/prices_daily.csv")
+
+def read_tickers() -> list[str]:
+    if not TICKERS_FILE.exists():
+        raise FileNotFoundError(f"No existe {TICKERS_FILE}")
+
+    tickers = []
+
+    for line in TICKERS_FILE.read_text(encoding="utf-8").splitlines():
+        ticker = line.strip().upper()
+
+        if ticker and not ticker.startswith("#"):
+            tickers.append(ticker)
+
+    if not tickers:
+        raise ValueError("tickers.txt está vacío")
+
+    return tickers
 
 
 def stooq_symbol(ticker: str) -> str:
@@ -22,22 +33,28 @@ def stooq_symbol(ticker: str) -> str:
 
 def download_stooq_csv(ticker: str) -> list[dict]:
     symbol = stooq_symbol(ticker)
+    url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
 
-    # Usamos http porque algunos entornos fallan con https en urllib
-    url = f"http://stooq.com/q/d/l/?s={symbol}&i=d"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
 
-    with urllib.request.urlopen(url, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=30) as response:
         content = response.read().decode("utf-8")
 
     lines = content.splitlines()
 
     if len(lines) <= 1:
         print(f"[WARN] Sin datos para {ticker}")
+        print(content[:300])
         return []
 
-    rows = []
     reader = csv.DictReader(lines)
 
+    rows = []
     min_date = datetime.now() - timedelta(days=365 * YEARS_BACK)
 
     for row in reader:
@@ -66,15 +83,29 @@ def download_stooq_csv(ticker: str) -> list[dict]:
 
 
 def main() -> None:
+    tickers = read_tickers()
     all_rows = []
 
-    for ticker in TICKERS:
+    print(f"Tickers encontrados: {len(tickers)}")
+    print(", ".join(tickers))
+
+    for ticker in tickers:
         try:
-            all_rows.extend(download_stooq_csv(ticker))
+            rows = download_stooq_csv(ticker)
+            all_rows.extend(rows)
         except Exception as e:
             print(f"[ERROR] {ticker}: {e}")
 
+    if not all_rows:
+        raise RuntimeError(
+            "No se ha descargado ninguna fila. Revisa tickers.txt o Stooq."
+        )
+
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    all_rows.sort(
+        key=lambda row: (row["ticker"], row["date"])
+    )
 
     with OUTPUT_FILE.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(
@@ -93,7 +124,7 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(all_rows)
 
-    print(f"\nArchivo generado: {OUTPUT_FILE}")
+    print(f"Archivo generado: {OUTPUT_FILE}")
     print(f"Total filas: {len(all_rows)}")
 
 
