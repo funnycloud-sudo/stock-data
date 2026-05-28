@@ -1,1 +1,7 @@
-Sin fallidos
+CI | HTTP Error 400: Bad Request
+MO | HTTP Error 400: Bad Request
+COP | HTTP Error 400: Bad Request
+FANG | HTTP Error 400: Bad Request
+UNP | HTTP Error 400: Bad Request
+EQR | HTTP Error 400: Bad Request
+TER | HTTP Error 400: Bad Request
