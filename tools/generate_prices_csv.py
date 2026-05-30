@@ -9,7 +9,8 @@ TICKERS_FILE = Path("assets/data/tickers.txt")
 OUTPUT_FILE = Path("assets/data/prices_daily.csv")
 FAILED_FILE = Path("assets/data/failed_tickers.txt")
 
-YEARS_BACK = 5
+YEARS_BACK = 10
+REQUEST_DELAY_SECONDS = 0.4
 
 
 def read_tickers() -> list[str]:
@@ -17,12 +18,22 @@ def read_tickers() -> list[str]:
         raise FileNotFoundError(f"No existe {TICKERS_FILE}")
 
     tickers = []
+    seen = set()
 
     for line in TICKERS_FILE.read_text(encoding="utf-8").splitlines():
         ticker = line.strip().upper()
 
-        if ticker and not ticker.startswith("#"):
-            tickers.append(ticker)
+        if not ticker:
+            continue
+
+        if ticker.startswith("#"):
+            continue
+
+        if ticker in seen:
+            continue
+
+        seen.add(ticker)
+        tickers.append(ticker)
 
     if not tickers:
         raise ValueError("tickers.txt está vacío")
@@ -44,7 +55,11 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
         },
     )
 
@@ -139,7 +154,9 @@ def main() -> None:
     print(f"Tickers encontrados: {len(tickers)}")
     print(", ".join(tickers))
 
-    for ticker in tickers:
+    for index, ticker in enumerate(tickers, start=1):
+        print(f"\n[{index}/{len(tickers)}] Descargando {ticker}...")
+
         try:
             rows = download_yahoo_chart(ticker)
             all_rows.extend(rows)
@@ -147,6 +164,8 @@ def main() -> None:
             reason = str(e)
             failed.append((ticker, reason))
             print(f"[ERROR] {ticker}: {reason}")
+
+        time.sleep(REQUEST_DELAY_SECONDS)
 
     write_failed_tickers(failed)
 
@@ -178,15 +197,21 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(all_rows)
 
-    print(f"Archivo generado: {OUTPUT_FILE}")
+    print(f"\nArchivo generado: {OUTPUT_FILE}")
     print(f"Total filas: {len(all_rows)}")
 
+    print("\nComprobación rápida:")
+
+    for symbol in ["SPY", "QQQ", "IWM", "XLK", "XLB"]:
+        count = sum(1 for row in all_rows if row["ticker"] == symbol)
+        print(f"{symbol}: {count} filas")
+
     if failed:
-        print(f"Tickers fallidos: {len(failed)}")
+        print(f"\nTickers fallidos: {len(failed)}")
         for ticker, reason in failed:
             print(f" - {ticker}: {reason}")
     else:
-        print("Tickers fallidos: 0")
+        print("\nTickers fallidos: 0")
 
 
 if __name__ == "__main__":
