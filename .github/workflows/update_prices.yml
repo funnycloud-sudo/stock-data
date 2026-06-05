@@ -6,9 +6,6 @@ env:
 on:
   workflow_dispatch:
 
-  schedule:
-    - cron: '*/15 * * * *'
-
 permissions:
   contents: write
 
