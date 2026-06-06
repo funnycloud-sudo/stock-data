@@ -2,15 +2,23 @@ import csv
 import json
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, time as datetime_time, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 TICKERS_FILE = Path("assets/data/tickers.txt")
 OUTPUT_FILE = Path("assets/data/prices_daily.csv")
+LATEST_FILE = Path("assets/data/latest_prices.csv")
 FAILED_FILE = Path("assets/data/failed_tickers.txt")
 
 YEARS_BACK = 10
 REQUEST_DELAY_SECONDS = 0.4
+
+NY_ZONE = ZoneInfo("America/New_York")
+MADRID_ZONE = ZoneInfo("Europe/Madrid")
+
+MARKET_CLOSE_CONFIRM_HOUR = 17
+MARKET_CLOSE_CONFIRM_MINUTE = 30
 
 
 def read_tickers() -> list[str]:
@@ -39,6 +47,64 @@ def read_tickers() -> list[str]:
         raise ValueError("tickers.txt está vacío")
 
     return tickers
+
+
+def market_close_confirmed() -> bool:
+    ny_now = datetime.now(NY_ZONE)
+
+    if ny_now.weekday() >= 5:
+        return True
+
+    confirm_time = datetime_time(
+        MARKET_CLOSE_CONFIRM_HOUR,
+        MARKET_CLOSE_CONFIRM_MINUTE,
+    )
+
+    return ny_now.time() >= confirm_time
+
+
+def current_market_status() -> str:
+    ny_now = datetime.now(NY_ZONE)
+
+    if ny_now.weekday() >= 5:
+        return "closed_weekend"
+
+    regular_open = datetime_time(9, 30)
+    regular_close = datetime_time(16, 0)
+    confirm_time = datetime_time(
+        MARKET_CLOSE_CONFIRM_HOUR,
+        MARKET_CLOSE_CONFIRM_MINUTE,
+    )
+
+    if ny_now.time() < regular_open:
+        return "pre_market"
+
+    if regular_open <= ny_now.time() < regular_close:
+        return "open"
+
+    if regular_close <= ny_now.time() < confirm_time:
+        return "closed_not_confirmed"
+
+    return "closed_confirmed"
+
+
+def today_ny_string() -> str:
+    return datetime.now(NY_ZONE).strftime("%Y-%m-%d")
+
+
+def now_utc_string() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def now_madrid_string() -> str:
+    return datetime.now(MADRID_ZONE).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def yahoo_date_from_timestamp(timestamp: int) -> str:
+    return datetime.fromtimestamp(
+        timestamp,
+        tz=NY_ZONE,
+    ).strftime("%Y-%m-%d")
 
 
 def download_yahoo_chart(ticker: str) -> list[dict]:
@@ -108,10 +174,7 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
             ):
                 continue
 
-            date = datetime.fromtimestamp(
-                timestamp,
-                tz=timezone.utc,
-            ).strftime("%Y-%m-%d")
+            date = yahoo_date_from_timestamp(timestamp)
 
             rows.append(
                 {
@@ -134,49 +197,110 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
     return rows
 
 
-def write_failed_tickers(failed: list[tuple[str, str]]) -> None:
-    FAILED_FILE.parent.mkdir(parents=True, exist_ok=True)
+def remove_unconfirmed_today_rows(rows: list[dict]) -> list[dict]:
+    today = today_ny_string()
 
-    with FAILED_FILE.open("w", encoding="utf-8") as file:
-        if not failed:
-            file.write("Sin fallidos\n")
-            return
+    if market_close_confirmed():
+        print("[INFO] Mercado cerrado confirmado. Se permite la vela de hoy.")
+        return rows
 
-        for ticker, reason in failed:
-            file.write(f"{ticker} | {reason}\n")
+    print(
+        "[INFO] Mercado no cerrado/confirmado. "
+        "Se elimina la vela provisional de hoy del CSV técnico."
+    )
+
+    filtered_rows = [
+        row for row in rows
+        if row["date"] < today
+    ]
+
+    removed_count = len(rows) - len(filtered_rows)
+
+    print(f"[INFO] Filas provisionales eliminadas: {removed_count}")
+
+    return filtered_rows
 
 
-def main() -> None:
-    tickers = read_tickers()
-    all_rows = []
-    failed = []
+def build_latest_rows(
+    raw_rows_by_ticker: dict[str, list[dict]],
+    confirmed_rows_by_ticker: dict[str, list[dict]],
+) -> list[dict]:
+    latest_rows = []
+    status = current_market_status()
+    updated_at_utc = now_utc_string()
+    updated_at_madrid = now_madrid_string()
 
-    print(f"Tickers encontrados: {len(tickers)}")
-    print(", ".join(tickers))
+    for ticker, raw_rows in raw_rows_by_ticker.items():
+        if not raw_rows:
+            continue
 
-    for index, ticker in enumerate(tickers, start=1):
-        print(f"\n[{index}/{len(tickers)}] Descargando {ticker}...")
+        latest = raw_rows[-1]
+        confirmed_rows = confirmed_rows_by_ticker.get(ticker, [])
 
-        try:
-            rows = download_yahoo_chart(ticker)
-            all_rows.extend(rows)
-        except Exception as e:
-            reason = str(e)
-            failed.append((ticker, reason))
-            print(f"[ERROR] {ticker}: {reason}")
+        confirmed_close = ""
+        confirmed_close_date = ""
+        change_from_close = ""
+        change_from_close_percent = ""
 
-        time.sleep(REQUEST_DELAY_SECONDS)
+        if confirmed_rows:
+            confirmed = confirmed_rows[-1]
+            confirmed_close = confirmed["close"]
+            confirmed_close_date = confirmed["date"]
 
-    write_failed_tickers(failed)
+            if confirmed_close:
+                diff = latest["close"] - float(confirmed_close)
 
-    if not all_rows:
-        raise RuntimeError(
-            "No se ha descargado ninguna fila."
+                change_from_close = round(diff, 6)
+
+                if float(confirmed_close) != 0:
+                    change_from_close_percent = round(
+                        diff / float(confirmed_close) * 100,
+                        4,
+                    )
+
+        latest_rows.append(
+            {
+                "ticker": ticker,
+                "price": latest["close"],
+                "price_date": latest["date"],
+                "updated_at_utc": updated_at_utc,
+                "updated_at_madrid": updated_at_madrid,
+                "market_status": status,
+                "confirmed_close": confirmed_close,
+                "confirmed_close_date": confirmed_close_date,
+                "change_from_close": change_from_close,
+                "change_from_close_percent": change_from_close_percent,
+            }
         )
 
+    latest_rows.sort(
+        key=lambda row: row["ticker"]
+    )
+
+    return latest_rows
+
+
+def group_rows_by_ticker(rows: list[dict]) -> dict[str, list[dict]]:
+    grouped = {}
+
+    for row in rows:
+        ticker = row["ticker"]
+
+        grouped.setdefault(ticker, [])
+        grouped[ticker].append(row)
+
+    for ticker_rows in grouped.values():
+        ticker_rows.sort(
+            key=lambda row: row["date"]
+        )
+
+    return grouped
+
+
+def write_prices_daily(rows: list[dict]) -> None:
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    all_rows.sort(
+    rows.sort(
         key=lambda row: (row["ticker"], row["date"])
     )
 
@@ -195,16 +319,131 @@ def main() -> None:
         )
 
         writer.writeheader()
-        writer.writerows(all_rows)
+        writer.writerows(rows)
+
+
+def write_latest_prices(rows: list[dict]) -> None:
+    LATEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with LATEST_FILE.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "ticker",
+                "price",
+                "price_date",
+                "updated_at_utc",
+                "updated_at_madrid",
+                "market_status",
+                "confirmed_close",
+                "confirmed_close_date",
+                "change_from_close",
+                "change_from_close_percent",
+            ],
+        )
+
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_failed_tickers(failed: list[tuple[str, str]]) -> None:
+    FAILED_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with FAILED_FILE.open("w", encoding="utf-8") as file:
+        if not failed:
+            file.write("Sin fallidos\n")
+            return
+
+        for ticker, reason in failed:
+            file.write(f"{ticker} | {reason}\n")
+
+
+def main() -> None:
+    tickers = read_tickers()
+    raw_all_rows = []
+    failed = []
+
+    print(f"Tickers encontrados: {len(tickers)}")
+    print(", ".join(tickers))
+    print(f"Estado mercado: {current_market_status()}")
+    print(f"Actualizado UTC: {now_utc_string()}")
+    print(f"Actualizado Madrid: {now_madrid_string()}")
+
+    for index, ticker in enumerate(tickers, start=1):
+        print(f"\n[{index}/{len(tickers)}] Descargando {ticker}...")
+
+        try:
+            rows = download_yahoo_chart(ticker)
+            raw_all_rows.extend(rows)
+        except Exception as e:
+            reason = str(e)
+            failed.append((ticker, reason))
+            print(f"[ERROR] {ticker}: {reason}")
+
+        time.sleep(REQUEST_DELAY_SECONDS)
+
+    write_failed_tickers(failed)
+
+    if not raw_all_rows:
+        raise RuntimeError(
+            "No se ha descargado ninguna fila."
+        )
+
+    raw_all_rows.sort(
+        key=lambda row: (row["ticker"], row["date"])
+    )
+
+    confirmed_rows = remove_unconfirmed_today_rows(raw_all_rows)
+
+    if not confirmed_rows:
+        raise RuntimeError(
+            "No hay filas confirmadas para generar prices_daily.csv."
+        )
+
+    raw_rows_by_ticker = group_rows_by_ticker(raw_all_rows)
+    confirmed_rows_by_ticker = group_rows_by_ticker(confirmed_rows)
+
+    latest_rows = build_latest_rows(
+        raw_rows_by_ticker=raw_rows_by_ticker,
+        confirmed_rows_by_ticker=confirmed_rows_by_ticker,
+    )
+
+    write_prices_daily(confirmed_rows)
+    write_latest_prices(latest_rows)
 
     print(f"\nArchivo generado: {OUTPUT_FILE}")
-    print(f"Total filas: {len(all_rows)}")
+    print(f"Total filas confirmadas: {len(confirmed_rows)}")
+
+    print(f"\nArchivo generado: {LATEST_FILE}")
+    print(f"Total precios actualizados: {len(latest_rows)}")
 
     print("\nComprobación rápida:")
 
     for symbol in ["SPY", "QQQ", "IWM", "XLK", "XLB"]:
-        count = sum(1 for row in all_rows if row["ticker"] == symbol)
-        print(f"{symbol}: {count} filas")
+        count = sum(
+            1 for row in confirmed_rows
+            if row["ticker"] == symbol
+        )
+
+        latest = next(
+            (
+                row for row in latest_rows
+                if row["ticker"] == symbol
+            ),
+            None,
+        )
+
+        print(f"{symbol}: {count} filas confirmadas")
+
+        if latest:
+            print(
+                f"  Precio actualizado: {latest['price']} "
+                f"({latest['price_date']})"
+            )
+            print(
+                f"  Cierre confirmado: {latest['confirmed_close']} "
+                f"({latest['confirmed_close_date']})"
+            )
 
     if failed:
         print(f"\nTickers fallidos: {len(failed)}")
