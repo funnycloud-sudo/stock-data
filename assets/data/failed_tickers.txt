@@ -1,1 +1,3 @@
-Sin fallidos
+X | HTTP Error 404: Not Found
+MAG | HTTP Error 404: Not Found
+SILV | HTTP Error 404: Not Found
