@@ -1,1 +1,2 @@
-Sin fallidos
+ED | HTTP Error 500: Internal Server Error
+IAI | HTTP Error 400: Bad Request
