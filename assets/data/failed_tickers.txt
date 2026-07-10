@@ -1,3 +1,1 @@
-XLRE | HTTP Error 500: Internal Server Error
-V | HTTP Error 400: Bad Request
-NXPI | HTTP Error 400: Bad Request
+Sin fallidos
