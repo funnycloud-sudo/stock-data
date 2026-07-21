@@ -1,2 +1,1 @@
-CSX | HTTP Error 400: Bad Request
-CCI | HTTP Error 400: Bad Request
+Sin fallidos
