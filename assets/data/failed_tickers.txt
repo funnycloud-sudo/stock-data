@@ -1,14 +1,1 @@
-XLB | The read operation timed out
-BRK-B | The read operation timed out
-AMAT | The read operation timed out
-SNPS | The read operation timed out
-WBD | The read operation timed out
-AXP | The read operation timed out
-ORLY | The read operation timed out
-EOG | The read operation timed out
-WM | The read operation timed out
-NSC | The read operation timed out
-WELL | The read operation timed out
-VMC | The read operation timed out
-VB | The read operation timed out
-FSM | The read operation timed out
+Sin fallidos
