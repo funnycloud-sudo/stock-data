@@ -152,25 +152,6 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
     timestamps = result.get("timestamp", [])
     quote = result.get("indicators", {}).get("quote", [{}])[0]
 
-    # Yahoo OHLC values are raw. For historical strategy/backtest work, raw
-    # series create artificial crashes on split dates (for example a 10:1
-    # split looks like a ~90% loss). Adjust OHLC for splits only while leaving
-    # dividends untouched so the technical engine sees a continuous price
-    # series without turning it into a total-return series.
-    split_events = []
-    for event in result.get("events", {}).get("splits", {}).values():
-        try:
-            split_timestamp = int(event.get("date"))
-            numerator = float(event.get("numerator"))
-            denominator = float(event.get("denominator"))
-            ratio = numerator / denominator
-            if ratio > 0 and abs(ratio - 1.0) > 1e-12:
-                split_events.append((split_timestamp, ratio))
-        except (TypeError, ValueError, ZeroDivisionError):
-            continue
-
-    split_events.sort(key=lambda item: item[0])
-
     opens = quote.get("open", [])
     highs = quote.get("high", [])
     lows = quote.get("low", [])
@@ -197,26 +178,15 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
 
             date = yahoo_date_from_timestamp(timestamp, ticker)
 
-            split_factor = 1.0
-            for split_timestamp, ratio in split_events:
-                if timestamp < split_timestamp:
-                    split_factor *= ratio
-
-            adjusted_open = float(open_price) / split_factor
-            adjusted_high = float(high_price) / split_factor
-            adjusted_low = float(low_price) / split_factor
-            adjusted_close = float(close_price) / split_factor
-            adjusted_volume = int(round(float(volume or 0) * split_factor))
-
             rows.append(
                 {
                     "ticker": ticker,
                     "date": date,
-                    "open": round(adjusted_open, 6),
-                    "high": round(adjusted_high, 6),
-                    "low": round(adjusted_low, 6),
-                    "close": round(adjusted_close, 6),
-                    "volume": adjusted_volume,
+                    "open": round(float(open_price), 6),
+                    "high": round(float(high_price), 6),
+                    "low": round(float(low_price), 6),
+                    "close": round(float(close_price), 6),
+                    "volume": int(volume or 0),
                 }
             )
         except Exception as e:
@@ -225,8 +195,6 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
     if not rows:
         raise RuntimeError(f"Sin filas válidas para {ticker}")
 
-    if split_events:
-        print(f"[INFO] {ticker}: {len(split_events)} split(s) ajustados")
     print(f"[OK] {ticker}: {len(rows)} filas")
     return rows
 
