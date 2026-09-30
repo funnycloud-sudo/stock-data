@@ -18,6 +18,10 @@ MARKET_CLOSE_CONFIRM_HOUR = 17
 MARKET_CLOSE_CONFIRM_MINUTE = 30
 
 
+def is_crypto_ticker(ticker: str) -> bool:
+    return ticker.endswith("-USD")
+
+
 def read_tickers() -> list[str]:
     tickers: list[str] = []
     seen: set[str] = set()
@@ -139,7 +143,7 @@ def fetch_latest_daily(ticker: str) -> tuple[str, float]:
 def main() -> None:
     tickers = read_tickers()
     confirmed = confirmed_closes()
-    status = current_market_status()
+    equity_status = current_market_status()
     updated_at_utc = now_utc_string()
     updated_at_madrid = now_madrid_string()
 
@@ -147,7 +151,7 @@ def main() -> None:
     failed: list[tuple[str, str]] = []
 
     print(f"Actualizando latest_prices.csv para {len(tickers)} tickers")
-    print(f"Estado mercado: {status}")
+    print(f"Estado mercado acciones: {equity_status}")
     print(f"Actualizado Madrid: {updated_at_madrid}")
 
     for index, ticker in enumerate(tickers, start=1):
@@ -178,7 +182,7 @@ def main() -> None:
                     "price_date": price_date,
                     "updated_at_utc": updated_at_utc,
                     "updated_at_madrid": updated_at_madrid,
-                    "market_status": status,
+                    "market_status": "open_24_7" if is_crypto_ticker(ticker) else equity_status,
                     "confirmed_close": confirmed_close,
                     "confirmed_close_date": confirmed_close_date,
                     "change_from_close": change_from_close,
