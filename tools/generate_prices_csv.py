@@ -104,11 +104,9 @@ def now_madrid_string() -> str:
     return datetime.now(MADRID_ZONE).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def yahoo_date_from_timestamp(timestamp: int) -> str:
-    return datetime.fromtimestamp(
-        timestamp,
-        tz=NY_ZONE,
-    ).strftime("%Y-%m-%d")
+def yahoo_date_from_timestamp(timestamp: int, ticker: str) -> str:
+    zone = timezone.utc if is_crypto_ticker(ticker) else NY_ZONE
+    return datetime.fromtimestamp(timestamp, tz=zone).strftime("%Y-%m-%d")
 
 
 def download_yahoo_chart(ticker: str) -> list[dict]:
@@ -178,7 +176,7 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
             ):
                 continue
 
-            date = yahoo_date_from_timestamp(timestamp)
+            date = yahoo_date_from_timestamp(timestamp, ticker)
 
             rows.append(
                 {
