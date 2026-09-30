@@ -11,9 +11,9 @@ on:
       - "tools/update_latest_prices.py"
       - "assets/data/tickers.txt"
   schedule:
-    # Weekdays, every hour around US pre-market / regular session / close.
-    # GitHub cron runs in UTC and may start a few minutes late.
-    - cron: "10 13-22 * * 1-5"
+    # Hourly, every day: equities update when Yahoo changes and crypto runs 24/7.
+    # GitHub cron may start a few minutes late.
+    - cron: "10 * * * *"
 
 permissions:
   contents: write
