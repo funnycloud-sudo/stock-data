@@ -5,6 +5,9 @@ env:
 
 on:
   workflow_dispatch:
+  schedule:
+    # 22:45 UTC is after 17:30 New York throughout DST changes.
+    - cron: "45 22 * * 1-5"
 
 permissions:
   contents: write
