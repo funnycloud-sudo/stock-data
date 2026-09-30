@@ -342,3 +342,9 @@ STM
 TT
 VRT
 XSD
+
+
+# Crypto majors (Yahoo symbols)
+BTC-USD
+ETH-USD
+SOL-USD
