@@ -1,0 +1,43 @@
+name: Update latest prices hourly
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekdays, every hour around US pre-market / regular session / close.
+    # GitHub cron runs in UTC and may start a few minutes late.
+    - cron: "10 13-22 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-data-latest
+  cancel-in-progress: false
+
+jobs:
+  update-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Update latest_prices.csv
+        run: python tools/update_latest_prices.py
+
+      - name: Commit latest snapshot
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add assets/data/latest_prices.csv
+          git commit -m "Update latest prices" || echo "No hay cambios"
+          git push
