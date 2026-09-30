@@ -6,8 +6,8 @@ env:
 on:
   workflow_dispatch:
   schedule:
-    # 22:45 UTC is after 17:30 New York throughout DST changes.
-    - cron: "45 22 * * 1-5"
+    # 00:15 UTC captures the prior crypto day and is after the US equity close.
+    - cron: "15 0 * * *"
 
 permissions:
   contents: write
