@@ -5,6 +5,11 @@ env:
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "tools/generate_prices_csv.py"
+      - "assets/data/tickers.txt"
+      - ".github/workflows/update_prices.yml"
   schedule:
     # 00:15 UTC captures the prior crypto day and is after the US equity close.
     - cron: "15 0 * * *"
@@ -44,4 +49,5 @@ jobs:
           git config user.email "github-actions@github.com"
           git add assets/data/prices_daily.csv assets/data/latest_prices.csv assets/data/failed_tickers.txt
           git commit -m "Update daily prices" || echo "No hay cambios"
+          git pull --rebase origin main
           git push
