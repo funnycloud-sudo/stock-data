@@ -5,6 +5,11 @@ env:
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/update_latest_prices.yml"
+      - "tools/update_latest_prices.py"
+      - "assets/data/tickers.txt"
   schedule:
     # Weekdays, every hour around US pre-market / regular session / close.
     # GitHub cron runs in UTC and may start a few minutes late.
