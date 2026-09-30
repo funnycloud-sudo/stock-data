@@ -21,6 +21,10 @@ MARKET_CLOSE_CONFIRM_HOUR = 17
 MARKET_CLOSE_CONFIRM_MINUTE = 30
 
 
+def is_crypto_ticker(ticker: str) -> bool:
+    return ticker.endswith("-USD")
+
+
 def read_tickers() -> list[str]:
     if not TICKERS_FILE.exists():
         raise FileNotFoundError(f"No existe {TICKERS_FILE}")
@@ -198,25 +202,33 @@ def download_yahoo_chart(ticker: str) -> list[dict]:
 
 
 def remove_unconfirmed_today_rows(rows: list[dict]) -> list[dict]:
-    today = today_ny_string()
+    today_ny = today_ny_string()
+    today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    equities_confirmed = market_close_confirmed()
 
-    if market_close_confirmed():
-        print("[INFO] Mercado cerrado confirmado. Se permite la vela de hoy.")
-        return rows
+    filtered_rows = []
 
-    print(
-        "[INFO] Mercado no cerrado/confirmado. "
-        "Se elimina la vela provisional de hoy del CSV técnico."
-    )
+    for row in rows:
+        ticker = row["ticker"]
+        date = row["date"]
 
-    filtered_rows = [
-        row for row in rows
-        if row["date"] < today
-    ]
+        if is_crypto_ticker(ticker):
+            # Crypto trades 24/7. The current UTC daily candle is provisional
+            # until the UTC day has closed, so never use it in the M/W/D engine.
+            if date >= today_utc:
+                continue
+            filtered_rows.append(row)
+            continue
+
+        if equities_confirmed or date < today_ny:
+            filtered_rows.append(row)
 
     removed_count = len(rows) - len(filtered_rows)
 
-    print(f"[INFO] Filas provisionales eliminadas: {removed_count}")
+    print(
+        "[INFO] Filas provisionales eliminadas "
+        f"(acciones + crypto UTC): {removed_count}"
+    )
 
     return filtered_rows
 
@@ -226,7 +238,7 @@ def build_latest_rows(
     confirmed_rows_by_ticker: dict[str, list[dict]],
 ) -> list[dict]:
     latest_rows = []
-    status = current_market_status()
+    equity_status = current_market_status()
     updated_at_utc = now_utc_string()
     updated_at_madrid = now_madrid_string()
 
@@ -265,7 +277,7 @@ def build_latest_rows(
                 "price_date": latest["date"],
                 "updated_at_utc": updated_at_utc,
                 "updated_at_madrid": updated_at_madrid,
-                "market_status": status,
+                "market_status": "open_24_7" if is_crypto_ticker(ticker) else equity_status,
                 "confirmed_close": confirmed_close,
                 "confirmed_close_date": confirmed_close_date,
                 "change_from_close": change_from_close,
