@@ -1,0 +1,39 @@
+name: Split frozen research CSV
+on:
+  push:
+    branches: ["research/split-frozen-20261001"]
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split CSV
+        run: |
+          mkdir -p research_chunks
+          python - <<'PY'
+          from pathlib import Path
+          src=Path("assets/data/prices_daily.csv")
+          out=Path("research_chunks")
+          max_bytes=7_000_000
+          header=src.open().readline()
+          part=0; size=0; f=None
+          for line in src.open():
+              if line==header and part==0 and size==0: continue
+              b=len(line.encode())
+              if f is None or size+b>max_bytes:
+                  if f: f.close()
+                  f=(out/f"prices_{part:02d}.csv").open("w")
+                  f.write(header); size=len(header.encode()); part+=1
+              f.write(line); size+=b
+          if f: f.close()
+          print("parts",part)
+          PY
+      - name: Commit chunks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research_chunks
+          git commit -m "research: split frozen CSV for validation" || exit 0
+          git push
