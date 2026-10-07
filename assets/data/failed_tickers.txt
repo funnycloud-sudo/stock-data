@@ -1,5 +1,3 @@
 BK | HTTP Error 404: Not Found
 MMC | HTTP Error 404: Not Found
 CTRA | HTTP Error 404: Not Found
-AMD | HTTP Error 502: Bad Gateway
-DKS | HTTP Error 502: Bad Gateway
