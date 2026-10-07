@@ -1,6 +1,7 @@
 import csv
 import json
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, time as datetime_time, timezone
 from pathlib import Path
@@ -11,6 +12,8 @@ DAILY_FILE = Path("assets/data/prices_daily.csv")
 LATEST_FILE = Path("assets/data/latest_prices.csv")
 
 REQUEST_DELAY_SECONDS = 0.25
+DOWNLOAD_MAX_ATTEMPTS = 3
+DOWNLOAD_RETRY_BASE_SECONDS = 1.5
 NY_ZONE = ZoneInfo("America/New_York")
 MADRID_ZONE = ZoneInfo("Europe/Madrid")
 
@@ -109,8 +112,29 @@ def fetch_latest_daily(ticker: str) -> tuple[str, float]:
         },
     )
 
-    with urllib.request.urlopen(request, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    payload = None
+    for attempt in range(1, DOWNLOAD_MAX_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            transient = exc.code == 429 or 500 <= exc.code <= 599
+            if not transient or attempt == DOWNLOAD_MAX_ATTEMPTS:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == DOWNLOAD_MAX_ATTEMPTS:
+                raise
+
+        delay = DOWNLOAD_RETRY_BASE_SECONDS * attempt
+        print(
+            f"Reintentando {ticker} tras error transitorio "
+            f"(intento {attempt + 1}/{DOWNLOAD_MAX_ATTEMPTS})..."
+        )
+        time.sleep(delay)
+
+    if payload is None:
+        raise RuntimeError(f"No se pudo descargar {ticker}")
 
     chart = payload.get("chart", {})
     if chart.get("error") is not None:

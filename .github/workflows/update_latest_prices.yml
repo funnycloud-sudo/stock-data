@@ -31,11 +31,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Sync latest main
-        run: |
-          git fetch origin main
-          git checkout -B main origin/main
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

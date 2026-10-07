@@ -1,5 +1,3 @@
-SRE | HTTP Error 502: Bad Gateway
 BK | HTTP Error 404: Not Found
 MMC | HTTP Error 404: Not Found
-CCL | HTTP Error 502: Bad Gateway
 CTRA | HTTP Error 404: Not Found
