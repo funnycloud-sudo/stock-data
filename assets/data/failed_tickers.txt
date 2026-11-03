@@ -1,3 +1,3 @@
-BK | HTTP Error 404: Not Found
+BK | Sin filas válidas para BK
 MMC | HTTP Error 404: Not Found
-CTRA | HTTP Error 404: Not Found
+CTRA | Sin filas válidas para CTRA
